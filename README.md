@@ -1,4 +1,4 @@
-# RANGER-C3
+# ranger
 
 Distributed multi-node mesh C2 framework
 `github.com/saviorSEC/ranger`.
